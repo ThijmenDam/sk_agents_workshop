@@ -3,3 +3,6 @@ semantic-kernel>=1.26.1
 python-dotenv>=1.0.0
 PyPDF2>=3.0.0
 azure-core>=1.32.0
+azure-ai-projects>=1.0.0b8
+azure-ai-vision-imageanalysis>=1.0.0
+azure-cognitiveservices-vision-customvision>=3.1.1
