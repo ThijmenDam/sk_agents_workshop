@@ -1,5 +1,5 @@
 # Update the agent instructions
-ANALYZER_NAME = "ImageAnalyzerAgent"
+ANALYZER_NAME = "ImageAnalysisAgent"
 
 ANALYZER_INSTRUCTIONS = """
 You are an image analysis expert. When analyzing images:

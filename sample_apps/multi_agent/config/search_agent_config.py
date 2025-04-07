@@ -1,5 +1,5 @@
 # Update the agent instructions
-SEARCHER_NAME = "ProductSearchAgent"
+SEARCHER_NAME = "BingSearcherAgent"
 
 # Agent instructions as module-level constants
 SEARCHER_INSTRUCTIONS = """

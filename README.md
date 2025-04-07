@@ -22,16 +22,35 @@ The repository includes:
 
 ## Repository Structure
 
-- `labs/`: Contains Jupyter notebooks with interactive tutorials
-  - Lab 1: Introduction to Azure AI Agents and Semantic Kernel basics
-  - Lab 2: Building and deploying single agents
-  - Lab 3: Creating multi-agent systems
-  - Lab 4: Advanced agent interactions and scenarios
+- `labs/`: Contains hands-on Jupyter notebooks with interactive tutorials
+  - `lab_1.ipynb`: Introduction to Semantic Kernel Agents
+    - Basic agent creation and configuration
+    - Chat history and agent interactions
+    - Function calling and plugins integration
+    - Practical exercises with single agents
+  - `lab_2.ipynb`: Multi-Agent Systems with Semantic Kernel
+    - Transitioning from single to multi-agent systems
+    - Agent collaboration using AgentGroupChat
+    - Specialized agent roles and team design
+    - Agent selection and termination strategies
 
-- `sample_apps/`: Contains practical implementations that complement the notebook tutorials
-  - Single agent examples
-  - Multi-agent interaction demos
-  - Real-world use case implementations
+- `sample_apps/`: Reference implementations demonstrating concepts from labs
+  - `single_agent/`: PDF-enabled AI Assistant application
+    - Interactive chat interface using Streamlit
+    - PDF document analysis and querying
+    - Chat history management
+    - Plugin integration for document processing
+  - `multi_agent/`: Advanced multi-agent implementation
+    - Collaborative agent system with specialized roles
+    - Complex conversation orchestration
+    - Advanced agent selection strategies
+  - `solutions/`: Complete reference implementations
+
+- `data/`: Contains sample PDF documents for testing
+  - employees.pdf
+  - Expanded_Product_Sales_Data.pdf
+  - Expenses_Policy.pdf
+  - product_data.pdf
 
 ## Getting Started
 

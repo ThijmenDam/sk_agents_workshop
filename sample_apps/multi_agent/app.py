@@ -1,4 +1,3 @@
-import io
 import streamlit as st
 import asyncio
 import os
@@ -6,19 +5,16 @@ from typing import Annotated
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.agents import ChatCompletionAgent, AgentGroupChat
-from semantic_kernel.agents.strategies import KernelFunctionSelectionStrategy, KernelFunctionTerminationStrategy, DefaultTerminationStrategy
-from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureChatPromptExecutionSettings
+from semantic_kernel.agents.strategies import KernelFunctionSelectionStrategy, DefaultTerminationStrategy
+from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion
 from semantic_kernel.connectors.ai import FunctionChoiceBehavior
-from semantic_kernel.functions import kernel_function, KernelArguments, KernelFunctionFromPrompt
-from semantic_kernel.contents import ChatHistory, ChatMessageContent, ImageContent, TextContent
+from semantic_kernel.functions import KernelFunctionFromPrompt
+from semantic_kernel.contents import ChatHistory, ChatMessageContent, ImageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
-from azure.ai.projects.models import BingGroundingTool, ToolSet
-from azure.ai.projects import AIProjectClient
-from azure.identity import DefaultAzureCredential
-from azure.core.credentials import AzureKeyCredential
-from azure.ai.vision.imageanalysis import ImageAnalysisClient
-from azure.ai.vision.imageanalysis.models import VisualFeatures
-import aiohttp
+from plugins.bing_search_plugin import BingSearchPlugin
+from plugins.image_plugin import ImageAnalysisPlugin
+from config.analysis_agent_config import  ANALYZER_NAME, ANALYZER_INSTRUCTIONS
+from config.search_agent_config import SEARCHER_NAME, SEARCHER_INSTRUCTIONS
 
 @st.cache_resource
 def create_kernel():
