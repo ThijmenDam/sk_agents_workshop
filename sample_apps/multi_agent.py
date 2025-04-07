@@ -1,3 +1,4 @@
+import io
 import streamlit as st
 import asyncio
 import os
@@ -9,7 +10,7 @@ from semantic_kernel.agents.strategies import KernelFunctionSelectionStrategy, K
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureChatPromptExecutionSettings
 from semantic_kernel.connectors.ai import FunctionChoiceBehavior
 from semantic_kernel.functions import kernel_function, KernelArguments, KernelFunctionFromPrompt
-from semantic_kernel.contents import ChatHistory, ChatMessageContent
+from semantic_kernel.contents import ChatHistory, ChatMessageContent, ImageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from azure.ai.projects.models import BingGroundingTool, ToolSet
 from azure.ai.projects import AIProjectClient
@@ -59,7 +60,7 @@ Remember: Your goal is to help users find products that closely match what they 
 ANALYZER_INSTRUCTIONS = """
 You are an image analysis expert. When analyzing images:
 
-1. Use the analyze_image function to analyze the image in the current message metadata. This function will automatically access the image data.
+1. Use the extract_image_from_message function to analyze the image, which will be provided in the content_parts of the message.
 
 2. Based on the analysis, provide a clear, detailed description that includes:
    - The main object(s) and their distinguishing features
@@ -139,51 +140,56 @@ class ImageAnalysisPlugin:
         )
 
     @kernel_function(description="Analyze an image and generate a detailed caption")
-    async def analyze_image(self, image_data: bytes) -> str:
-        """Analyze an image and generate a detailed caption."""
+    async def extract_image_from_message(self, message: Annotated[ChatMessageContent, "The chat message containing the image"]) -> str:
+        print(f"Received message: {message}")
         try:
+            # If message is a string, try to parse it
+            if isinstance(message, str):
+                message = ChatMessageContent(role=AuthorRole.USER, content=message)
+            
+            # Extract image content from the chat message
+            image_content = None
+            if isinstance(message, ChatMessageContent):
+                if message.inner_content and isinstance(message.inner_content, ImageContent):
+                    image_content = message.inner_content
+
+            if not image_content or not image_content.image_data:
+                return "No valid image data found in the message. Please ensure the image was properly uploaded."
+
+            # Wrap raw bytes in a BytesIO stream
+            image_stream = io.BytesIO(image_content.image_data)
+
+            # Analyze the image with multiple visual features
             result = self.client.analyze(
-                image_data=image_data,
+                image_data=image_stream,
                 visual_features=[
                     VisualFeatures.CAPTION,
                     VisualFeatures.TAGS,
-                    VisualFeatures.OBJECTS
+                    VisualFeatures.OBJECTS,
+                    VisualFeatures.DENSE_CAPTIONS
                 ],
                 gender_neutral_caption=True,
             )
 
+            # Build a comprehensive description
+            description_parts = []
+            
             if result.caption:
-                return result.caption.text
-            return "No caption could be generated for this image."
+                description_parts.append(result.caption.text)
+            
+            if result.tags:
+                relevant_tags = [tag.name for tag in result.tags[:5]]
+                description_parts.append(f"Key features: {', '.join(relevant_tags)}")
+            
+            if result.dense_captions:
+                detailed_captions = [cap.text for cap in result.dense_captions[:3]]
+                description_parts.append("Additional details: " + "; ".join(detailed_captions))
+
+            return " ".join(description_parts) if description_parts else "No description could be generated for this image."
 
         except Exception as e:
-            print(f"Error in analyze_image: {str(e)}")
+            print(f"Error analyzing image: {str(e)}")
             return f"Error analyzing image: {str(e)}"
-
-    @kernel_function(description="Extract image data from message metadata")
-    async def extract_image_from_message(self, message: ChatMessageContent) -> bytes:
-        """Extract image data from a chat message's metadata."""
-        try:
-            if message and message.metadata and "image_data" in message.metadata:
-                return message.metadata["image_data"]
-            raise ValueError("No image data found in message metadata")
-        except Exception as e:
-            print(f"Error extracting image data: {str(e)}")
-            raise
-
-        
-
-    @kernel_function(description="Extract image data from message metadata")
-    async def extract_image_from_message(self, message: ChatMessageContent) -> bytes:
-        """Extract image data from a chat message's metadata."""
-        try:
-            if message and message.metadata and "image_data" in message.metadata:
-                return message.metadata["image_data"]
-            raise ValueError("No image data found in message metadata")
-        except Exception as e:
-            print(f"Error extracting image data: {str(e)}")
-            raise
-
         
 
 @st.cache_resource
@@ -243,72 +249,81 @@ async def initialize_chat():
         - {SEARCHER_NAME}
 
         Always follow these rules when selecting the next participant:
-        - After user input, it is {ANALYZER_NAME}'s turn.
-        - After {ANALYZER_NAME} describes the image, it is {SEARCHER_NAME}'s turn.
+        - After user input, it is {ANALYZER_NAME}'s turn to analyze the image.
+        - After {ANALYZER_NAME} describes the image, it is {SEARCHER_NAME}'s turn to search for products.
         - After {SEARCHER_NAME} provides product options, end the conversation.
         
         History:
-        {{{{$history}}}}
+        {{$history}}
         """
     )
 
+    # Create the group chat with updated selection strategy
     chat = AgentGroupChat(
         agents=[search_agent, image_agent],
         selection_strategy=KernelFunctionSelectionStrategy(
             function=selection_function,
             kernel=kernel,
             result_parser=lambda result: (
-                str(result.value[0]) if result.value and
-                str(result.value[0]).lower() != "none"
+                # Handle both list and string results
+                str(result.value[0]).strip() if isinstance(result.value, list) and result.value 
+                else result.value.strip() if isinstance(result.value, str) 
                 else None
             ),
             agent_variable_name="agents",
             history_variable_name="history"
-        )
+        ),
+        termination_strategy=DefaultTerminationStrategy(maximum_iterations=4)
     )
+    
+    # Initialize empty chat history
+    chat.history = ChatHistory()
+    
     return chat
 
 async def process_image_and_get_responses(chat, image_bytes):
     try:
-        # Initialize the chat history
-        if not hasattr(chat, "history"):
-            chat.history = ChatHistory()
+        # Create the user message with image content
+        image_content = ImageContent(
+            data=image_bytes,
+        )
 
-        # Create the user message with image data
+        # Create message with image content
         analyze_message = ChatMessageContent(
             role=AuthorRole.USER,
             content="Please analyze this image",
-            metadata={"image_data": image_bytes}
+            inner_content=image_content  # Use inner_content instead of content_parts
         )
 
-        # Add message to chat history
-        chat.history.add_message(analyze_message)
+        print(f"MESSAGE TYPE: {type(analyze_message)}")
+        print(f"MESSAGE INNER CONTENT: {type(analyze_message.inner_content)}")
 
-        # Display initial message in Streamlit
+        # Display initial message in Streamlit 
         with st.chat_message("user"):
             st.write("Analyzing your image...")
             st.image(image_bytes)
 
+        # Add message to chat history
+        chat.history = ChatHistory()  # Reset history for new conversation
+        chat.history.add_message(analyze_message)  # Add only the analyze message
 
+        # Invoke chat with proper image content
         async for response in chat.invoke():
             if response.role != "tool":
+                # Handle string or dict content types
+                content = response.content
+                if not isinstance(content, str):
+                    content = content.get("text", str(content))
+
                 response_dict = {
-                    "role": response.name.lower(),
-                    "content": response.content if isinstance(response.content, str)
-                            else response.content.get("text", "")
+                    "role": response.name.lower() if response.name else "assistant",
+                    "content": content
                 }
+                
                 with st.chat_message(response_dict["role"]):
                     st.write(response_dict["content"])
                 st.session_state["messages"].append(response_dict)
                 
-                # Add response to chat history with proper role
-                chat.history.add_message(ChatMessageContent(
-                    role=AuthorRole.ASSISTANT,
-                    content=response_dict["content"],
-                    name=response.name,
-                    metadata={"image_data": image_bytes}  # Preserve image data
-                ))
-
     except Exception as e:
         st.error(f"Error in processing image and responses: {str(e)}")
         print(f"Detailed error: {str(e)}")
