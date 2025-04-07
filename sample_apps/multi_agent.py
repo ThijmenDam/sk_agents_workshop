@@ -10,7 +10,7 @@ from semantic_kernel.agents.strategies import KernelFunctionSelectionStrategy, K
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureChatPromptExecutionSettings
 from semantic_kernel.connectors.ai import FunctionChoiceBehavior
 from semantic_kernel.functions import kernel_function, KernelArguments, KernelFunctionFromPrompt
-from semantic_kernel.contents import ChatHistory, ChatMessageContent, ImageContent
+from semantic_kernel.contents import ChatHistory, ChatMessageContent, ImageContent, TextContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from azure.ai.projects.models import BingGroundingTool, ToolSet
 from azure.ai.projects import AIProjectClient
@@ -140,28 +140,14 @@ class ImageAnalysisPlugin:
         )
 
     @kernel_function(description="Analyze an image and generate a detailed caption")
-    async def extract_image_from_message(self, message: Annotated[ChatMessageContent, "The chat message containing the image"]) -> str:
-        print(f"Received message: {message}")
+    async def extract_image_from_message(self, message: Annotated[ImageContent, "Metadata with the image"]) -> str:
+        
+        print(f"Message content: {message.data}")
+
         try:
-            # If message is a string, try to parse it
-            if isinstance(message, str):
-                message = ChatMessageContent(role=AuthorRole.USER, content=message)
-            
-            # Extract image content from the chat message
-            image_content = None
-            if isinstance(message, ChatMessageContent):
-                if message.inner_content and isinstance(message.inner_content, ImageContent):
-                    image_content = message.inner_content
-
-            if not image_content or not image_content.image_data:
-                return "No valid image data found in the message. Please ensure the image was properly uploaded."
-
-            # Wrap raw bytes in a BytesIO stream
-            image_stream = io.BytesIO(image_content.image_data)
-
             # Analyze the image with multiple visual features
             result = self.client.analyze(
-                image_data=image_stream,
+                image_data=message.data,
                 visual_features=[
                     VisualFeatures.CAPTION,
                     VisualFeatures.TAGS,
@@ -283,20 +269,21 @@ async def initialize_chat():
 
 async def process_image_and_get_responses(chat, image_bytes):
     try:
-        # Create the user message with image content
+        # Create the image content
         image_content = ImageContent(
             data=image_bytes,
         )
+        print(f"Image content type: {type(image_content.data)} {image_content.data}")
 
-        # Create message with image content
+        # Create chat message with proper structure
         analyze_message = ChatMessageContent(
             role=AuthorRole.USER,
             content="Please analyze this image",
-            inner_content=image_content  # Use inner_content instead of content_parts
+            metadata={"image":image_content} 
         )
 
         print(f"MESSAGE TYPE: {type(analyze_message)}")
-        print(f"MESSAGE INNER CONTENT: {type(analyze_message.inner_content)}")
+        print(f"MESSAGE INNER CONTENT: {type(analyze_message.metadata['image'])}")
 
         # Display initial message in Streamlit 
         with st.chat_message("user"):
@@ -304,14 +291,16 @@ async def process_image_and_get_responses(chat, image_bytes):
             st.image(image_bytes)
 
         # Add message to chat history
-        chat.history = ChatHistory()  # Reset history for new conversation
-        chat.history.add_message(analyze_message)  # Add only the analyze message
+        chat.history.add_message(analyze_message)  
+        print(f"Chat history after adding message: {chat.history}")
+
 
         # Invoke chat with proper image content
         async for response in chat.invoke():
             if response.role != "tool":
                 # Handle string or dict content types
                 content = response.content
+                print(f"Response type: {type(response)}")
                 if not isinstance(content, str):
                     content = content.get("text", str(content))
 
@@ -325,9 +314,9 @@ async def process_image_and_get_responses(chat, image_bytes):
                 st.session_state["messages"].append(response_dict)
                 
     except Exception as e:
-        st.error(f"Error in processing image and responses: {str(e)}")
-        print(f"Detailed error: {str(e)}")
-        raise
+        st.error(f"Error processing image: {str(e)}")
+        print(f"Detailed error in process_image_and_get_responses: {str(e)}")
+        # Don't re-raise to allow graceful error handling
 
 
 def main():
