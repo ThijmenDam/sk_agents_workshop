@@ -140,9 +140,10 @@ class ImageAnalysisPlugin:
         )
 
     @kernel_function(description="Analyze an image and generate a detailed caption")
-    async def extract_image_from_message(self, message: Annotated[ImageContent, "Metadata with the image"]) -> str:
+    async def extract_image_from_message(self, message: Annotated[ImageContent, "The image_data inside the inner_content"]) \
+        -> Annotated[str, "Image description"]:
         
-        print(f"Message content: {message.data}")
+        print(f"Message content: {type(message.data)} {message.data}")
 
         try:
             # Analyze the image with multiple visual features
@@ -279,11 +280,11 @@ async def process_image_and_get_responses(chat, image_bytes):
         analyze_message = ChatMessageContent(
             role=AuthorRole.USER,
             content="Please analyze this image",
-            metadata={"image":image_content} 
+            metadata={"image_data":image_content.data} 
         )
 
         print(f"MESSAGE TYPE: {type(analyze_message)}")
-        print(f"MESSAGE INNER CONTENT: {type(analyze_message.metadata['image'])}")
+        print(f"MESSAGE INNER CONTENT: {type(analyze_message.metadata['image_data'])}")
 
         # Display initial message in Streamlit 
         with st.chat_message("user"):
