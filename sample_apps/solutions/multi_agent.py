@@ -253,7 +253,7 @@ async def initialize_chat():
         {{$history}}
         """
     )
-
+    print("sddds")
     # Create the group chat with updated selection strategy
     chat = AgentGroupChat(
         agents=[search_agent, image_agent],
