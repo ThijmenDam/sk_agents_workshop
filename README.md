@@ -19,6 +19,7 @@ The repository includes:
 - Python 11.0.0 or later
 - Visual Studio Code or Visual Studio 2022
 - Basic knowledge of Python and async programming
+- Azure CLI installed 
 
 ## Repository Structure
 
@@ -55,6 +56,7 @@ The repository includes:
 ## Getting Started
 
 1. Clone this repository
+2. run `az login`
 2. Configure your Azure credentials
 3. Follow the lab instructions in each directory
 
@@ -77,5 +79,4 @@ The repository includes:
 
 
 ## License
-
 This project is licensed under the MIT License - see the LICENSE file for details.

@@ -19,6 +19,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.ai.vision.imageanalysis import ImageAnalysisClient
 from azure.ai.vision.imageanalysis.models import VisualFeatures
 import aiohttp
+import base64
 
 load_dotenv()
 
@@ -60,7 +61,8 @@ Remember: Your goal is to help users find products that closely match what they 
 ANALYZER_INSTRUCTIONS = """
 You are an image analysis expert. When analyzing images:
 
-1. Use the extract_image_from_message function to analyze the image, which will be provided in the content_parts of the message.
+1. Use the extract_image_from_message function to analyze the image, which will be provided in the items of the message.
+   Decode the Image Content to get the image bytes and analyze it using Azure Computer Vision.
 
 2. Based on the analysis, provide a clear, detailed description that includes:
    - The main object(s) and their distinguishing features
@@ -137,18 +139,26 @@ class ImageAnalysisPlugin:
         self.client = ImageAnalysisClient(
             endpoint=os.environ["COMPUTER_VISION_ENDPOINT"],
             credential=AzureKeyCredential(os.environ["COMPUTER_VISION_KEY"]),
-        )
+        )   
+                    
+    async def download_image_bytes(self, url: str) -> bytes:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    return await response.read()
+                else:
+                    raise Exception(f"Failed to download image. Status code: {response.status}")
 
-    @kernel_function(description="Analyze an image and generate a detailed caption")
-    async def extract_image_from_message(self, message: Annotated[ImageContent, "The image_data inside the inner_content"]) \
-        -> Annotated[str, "Image description"]:
-        
-        print(f"Message content: {type(message.data)} {message.data}")
+    async def extract_image_from_message(self, message: Annotated[ImageContent, "Latest message from the user with the image"]) \
+            -> Annotated[str, "Image description"]:
 
-        try:
-            # Analyze the image with multiple visual features
+        try:    
+            uri = str(message.uri)
+            image_bytes = await self.download_image_bytes(uri)
+
+            # Analyze image
             result = self.client.analyze(
-                image_data=message.data,
+                image_data=image_bytes,
                 visual_features=[
                     VisualFeatures.CAPTION,
                     VisualFeatures.TAGS,
@@ -158,16 +168,16 @@ class ImageAnalysisPlugin:
                 gender_neutral_caption=True,
             )
 
-            # Build a comprehensive description
+            # Build response
             description_parts = []
-            
+
             if result.caption:
                 description_parts.append(result.caption.text)
-            
+
             if result.tags:
                 relevant_tags = [tag.name for tag in result.tags[:5]]
                 description_parts.append(f"Key features: {', '.join(relevant_tags)}")
-            
+
             if result.dense_captions:
                 detailed_captions = [cap.text for cap in result.dense_captions[:3]]
                 description_parts.append("Additional details: " + "; ".join(detailed_captions))
@@ -176,9 +186,8 @@ class ImageAnalysisPlugin:
 
         except Exception as e:
             print(f"Error analyzing image: {str(e)}")
-            return f"Error analyzing image: {str(e)}"
-        
 
+            
 @st.cache_resource
 def create_kernel():
     kernel = Kernel()
@@ -236,7 +245,7 @@ async def initialize_chat():
         - {SEARCHER_NAME}
 
         Always follow these rules when selecting the next participant:
-        - After user input, it is {ANALYZER_NAME}'s turn to analyze the image.
+        - After user input, it is {ANALYZER_NAME}'s turn to extract the image from the user's message and analyze it.
         - After {ANALYZER_NAME} describes the image, it is {SEARCHER_NAME}'s turn to search for products.
         - After {SEARCHER_NAME} provides product options, end the conversation.
         
@@ -268,40 +277,37 @@ async def initialize_chat():
     
     return chat
 
+
 async def process_image_and_get_responses(chat, image_bytes):
     try:
-        # Create the image content
-        image_content = ImageContent(
-            data=image_bytes,
-        )
-        print(f"Image content type: {type(image_content.data)} {image_content.data}")
-
-        # Create chat message with proper structure
+        print(image_bytes)
         analyze_message = ChatMessageContent(
             role=AuthorRole.USER,
             content="Please analyze this image",
-            metadata={"image_data":image_content.data} 
+            items=[ImageContent(uri=image_bytes)],
+            metadata={"image_data": image_bytes}
         )
+        
+        # print(f"Message content type: {type(analyze_message.items[0].data)}")
 
-        print(f"MESSAGE TYPE: {type(analyze_message)}")
-        print(f"MESSAGE INNER CONTENT: {type(analyze_message.metadata['image_data'])}")
+        # print(f"MESSAGE TYPE: {type(analyze_message)}")
+        # print(f"MESSAGE INNER CONTENT: {type(analyze_message.metadata['image_data'])}")
 
         # Display initial message in Streamlit 
         with st.chat_message("user"):
-            st.write("Analyzing your image...")
+            st.write("Find listings of the object in the image:")
             st.image(image_bytes)
 
         # Add message to chat history
-        chat.history.add_message(analyze_message)  
-        print(f"Chat history after adding message: {chat.history}")
+        await chat.add_chat_message(analyze_message)  
 
+        # async for x in chat.get_chat_messages():
+        #     print(f"Chat message: {x.role} - {x.content} - {x.items[0].data}")
 
-        # Invoke chat with proper image content
         async for response in chat.invoke():
             if response.role != "tool":
                 # Handle string or dict content types
                 content = response.content
-                print(f"Response type: {type(response)}")
                 if not isinstance(content, str):
                     content = content.get("text", str(content))
 
@@ -317,14 +323,13 @@ async def process_image_and_get_responses(chat, image_bytes):
     except Exception as e:
         st.error(f"Error processing image: {str(e)}")
         print(f"Detailed error in process_image_and_get_responses: {str(e)}")
-        # Don't re-raise to allow graceful error handling
 
 
 def main():
     st.set_page_config(page_title="Image Analysis & Shopping Assistant")
 
     st.title("Image Analysis & Shopping Assistant")
-    st.caption("Upload an image to find where to buy similar items!")
+    st.caption("Enter an image URL to analyze")
 
     # Initialize session state
     if "messages" not in st.session_state:
@@ -339,34 +344,34 @@ def main():
             if "image_path" in message and message["image_path"]:
                 st.image(message["image_path"])
 
-    # Image upload 
-    uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+    # Simple URL input field
+    image_url = st.text_input("Enter image URL:")
     
-    if uploaded_file:
-        # Display the uploaded image
-        st.image(uploaded_file, caption="Uploaded Image", use_container_width=True)
-        
-        # Add an analyze button
-        if st.button("Analyze and Find Products"):
-            with st.spinner("Processing image..."):
-                # Get the image bytes
-                image_bytes = uploaded_file.getvalue()
-                
-                # Initialize chat if not already initialized
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    # Initialize chat if needed
-                    if st.session_state["chat"] is None:
-                        st.session_state["chat"] = loop.run_until_complete(initialize_chat())
-                    
-                    # Process image analysis and chat responses
-                    loop.run_until_complete(process_image_and_get_responses(
-                        st.session_state["chat"],
-                        image_bytes
-                    ))
-                finally:
-                    loop.close()
+    if image_url:
+        try:
+            # Display the image from URL
+            st.image(image_url, caption="Image from URL", use_container_width=True)
+            
+            # Add an analyze button
+            if st.button("Analyze and Find Products"):
+                with st.spinner("Processing image from URL..."):
+                    # Initialize chat if not already initialized
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        # Initialize chat if needed
+                        if st.session_state["chat"] is None:
+                            st.session_state["chat"] = loop.run_until_complete(initialize_chat())
+                        
+                        # Process image analysis and chat responses using URL
+                        loop.run_until_complete(process_image_and_get_responses(
+                            st.session_state["chat"],
+                            image_url
+                        ))
+                    finally:
+                        loop.close()
+        except Exception as e:
+            st.error(f"Error loading image from URL: {str(e)}")
 
     # Reset button
     if st.button("Start Over"):

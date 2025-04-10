@@ -4,17 +4,18 @@ from dotenv import load_dotenv
 import streamlit as st
 from semantic_kernel.contents import ChatHistory, ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
-from kernel_setup import initialize_chat
+from kernel_setup import initialize_agent
 
 async def run_chat(prompt: str):
     
     try:
         if st.session_state["agent"] is None:
-            st.session_state["agent"] = initialize_chat()
+            st.session_state["agent"] = initialize_agent()
             
-        # Initialize chat history 
+        #TODO: Initialize chat history 
         if "chat_history" not in st.session_state:
-            st.session_state["chat_history"] = ChatHistory()
+            # Set the st.session_state["chat_history"] as a new ChatHistory Instance
+            pass
 
         agent = st.session_state["agent"]
         chat_history = st.session_state["chat_history"]
@@ -48,12 +49,12 @@ async def run_chat(prompt: str):
             with st.chat_message(message["role"]):
                 st.write(message["content"])
             
-            # Add to chat history and session state
-            chat_history.add_message(ChatMessageContent(
-                role=AuthorRole.ASSISTANT,
-                content=content,
-                name=response.name
-            ))
+            #TODO: Add to chat history and session state
+            # 1 Add the response to the chat history
+            # The message should be a ChatMessageContent object
+            # 2 Set the role to ASSISTANT
+            # 3 Pass the content and response.name 
+
             st.session_state["messages"].append(message)
 
     except Exception as e:

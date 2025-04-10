@@ -8,6 +8,7 @@ from azure.identity import DefaultAzureCredential
 
 
 class BingSearchPlugin:
+    #TODO: refactor this and add this as a normal openai agent in the main app 
     def __init__(self):
         # Get the connection from the project client first
         self.project_client = AIProjectClient.from_connection_string(

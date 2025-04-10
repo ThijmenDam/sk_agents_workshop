@@ -15,7 +15,7 @@ def create_kernel_with_service():
     pass 
 
 @st.cache_resource
-def initialize_chat() -> ChatCompletionAgent:
+def initialize_agent() -> ChatCompletionAgent:
     """
     TODO: 
     1) Finish the create_kernel_with_service function to initialize the kernel with the Azure Chat Completion service.
