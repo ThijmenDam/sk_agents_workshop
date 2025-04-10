@@ -11,7 +11,7 @@ def main():
     st.set_page_config(page_title="Image Analysis & Shopping Assistant")
 
     st.title("Image Analysis & Shopping Assistant")
-    st.caption("Upload an image to find where to buy similar items!")
+    st.caption("Enter an image URL to analyze")
 
     # Initialize session state
     if "messages" not in st.session_state:
@@ -26,34 +26,34 @@ def main():
             if "image_path" in message and message["image_path"]:
                 st.image(message["image_path"])
 
-    # Image upload 
-    uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+    # Simple URL input field
+    image_url = st.text_input("Enter image URL:")
     
-    if uploaded_file:
-        # Display the uploaded image
-        st.image(uploaded_file, caption="Uploaded Image", use_container_width=True)
-        
-        # Add an analyze button
-        if st.button("Analyze and Find Products"):
-            with st.spinner("Processing image..."):
-                # Get the image bytes
-                image_bytes = uploaded_file.getvalue()
-                
-                # Initialize chat if not already initialized
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    # Initialize chat if needed
-                    if st.session_state["chat"] is None:
-                        st.session_state["chat"] = loop.run_until_complete(initialize_chat())
-                    
-                    # Process image analysis and chat responses
-                    loop.run_until_complete(process_image_and_get_responses(
-                        st.session_state["chat"],
-                        image_bytes
-                    ))
-                finally:
-                    loop.close()
+    if image_url:
+        try:
+            # Display the image from URL
+            st.image(image_url, caption="Image from URL", use_container_width=True)
+            
+            # Add an analyze button
+            if st.button("Analyze and Find Products"):
+                with st.spinner("Processing image from URL..."):
+                    # Initialize chat if not already initialized
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        # Initialize chat if needed
+                        if st.session_state["chat"] is None:
+                            st.session_state["chat"] = loop.run_until_complete(initialize_chat())
+                        
+                        # Process image analysis and chat responses using URL
+                        loop.run_until_complete(process_image_and_get_responses(
+                            st.session_state["chat"],
+                            image_url
+                        ))
+                    finally:
+                        loop.close()
+        except Exception as e:
+            st.error(f"Error loading image from URL: {str(e)}")
 
     # Reset button
     if st.button("Start Over"):
