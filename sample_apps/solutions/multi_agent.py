@@ -19,7 +19,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.ai.vision.imageanalysis import ImageAnalysisClient
 from azure.ai.vision.imageanalysis.models import VisualFeatures
 import aiohttp
-import base64
+
 
 load_dotenv()
 
