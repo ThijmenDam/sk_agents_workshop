@@ -50,8 +50,8 @@ async def run_chat(prompt: str):
             with st.chat_message(message["role"]):
                 st.write(message["content"])
 
-                chat_message = ChatMessageContent(role=AuthorRole.ASSISTANT, content=content, name=response.name)
-                chat_history.add_message(chat_message)
+            chat_message = ChatMessageContent(role=AuthorRole.ASSISTANT, content=content, name=response.name)
+            chat_history.add_message(chat_message)
 
             st.session_state["messages"].append(message)
 
