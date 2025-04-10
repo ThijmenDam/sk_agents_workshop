@@ -6,20 +6,20 @@ from semantic_kernel.contents import ChatHistory, ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from kernel_setup import initialize_agent
 
+
 async def run_chat(prompt: str):
-    
     try:
         if st.session_state["agent"] is None:
+            print("set agent")
             st.session_state["agent"] = initialize_agent()
-            
-        #TODO: Initialize chat history 
+
         if "chat_history" not in st.session_state:
-            # Set the st.session_state["chat_history"] as a new ChatHistory Instance
-            pass
+            print("set history")
+            st.session_state["chat_history"] = ChatHistory()
 
         agent = st.session_state["agent"]
         chat_history = st.session_state["chat_history"]
-        
+
         # Add user message to chat history
         chat_history.add_user_message(prompt)
 
@@ -27,15 +27,16 @@ async def run_chat(prompt: str):
         async for response in agent.invoke(messages=chat_history):
             if response.role == "tool":
                 continue
-                
+
             # Get content from response, defaulting to string content
             content = response.content
             if not isinstance(content, str):
                 if hasattr(response, 'items') and response.items:
                     content = response.items[0].text if hasattr(response.items[0], 'text') else str(response.items[0])
                 elif hasattr(response, 'inner_content') and response.inner_content:
-                    content = response.inner_content.choices[0].message.content if response.inner_content.choices else str(response.inner_content)
-            
+                    content = response.inner_content.choices[
+                        0].message.content if response.inner_content.choices else str(response.inner_content)
+
             if not content:
                 continue
 
@@ -48,17 +49,16 @@ async def run_chat(prompt: str):
             # Display message
             with st.chat_message(message["role"]):
                 st.write(message["content"])
-            
-            #TODO: Add to chat history and session state
-            # 1 Add the response to the chat history
-            # The message should be a ChatMessageContent object
-            # 2 Set the role to ASSISTANT
-            # 3 Pass the content and response.name 
+
+                # TODO: Add to chat history and session state
+                chat_message = ChatMessageContent(role=AuthorRole.ASSISTANT, content=content, name=response.name)
+                chat_history.add_message(chat_message)
 
             st.session_state["messages"].append(message)
 
     except Exception as e:
         st.error(f"Error: {str(e)}")
+
 
 def main():
     st.title("PDF-Enabled AI Assistant")
@@ -98,7 +98,7 @@ def main():
         st.session_state["agent"] = None
         st.rerun()
 
+
 if __name__ == "__main__":
     load_dotenv()
     main()
-
